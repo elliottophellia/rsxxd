@@ -1,0 +1,24 @@
+[package]
+name = "rsxxd"
+version = "1.0.0"
+edition = "2024"
+readme = "README.md"
+license = "GPL-3.0-or-later"
+authors = ["elliottophellia"]
+description = "hex-dump-type utility rsxxd"
+repository = "https://github.com/elliottophellia/rsxxd"
+keywords = ["hexdump", "hexadecimal", "tools", "ascii", "hex"]
+include = ["src/**/*", "Cargo.toml", "Cargo.lock", "README.md", "tests/**/*"]
+
+[dependencies]
+
+[[bin]]
+name = "rsxxd"
+path = "src/rsxxd.rs"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

@@ -1,0 +1,51 @@
+name: Publish and Release
+
+on:
+  workflow_run:
+    workflows: ["test"]
+    types: [completed]
+
+permissions:
+  contents: write 
+
+jobs:
+  publish-release:
+    runs-on: ubuntu-latest
+    if: |
+      github.event.workflow_run.conclusion == 'success' && 
+      github.event.workflow_run.head_branch == 'main'
+    
+    steps:
+      - name: Checkout code from main branch
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+        
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        
+      - name: Get version from Cargo.toml
+        id: get_version
+        run: echo "version=$(grep -oP '^version = "\K[^"]+' Cargo.toml)" >> $GITHUB_OUTPUT
+          
+      - name: Create and push tag
+        run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git tag -a v${{ steps.get_version.outputs.version }} -m "Release v${{ steps.get_version.outputs.version }}"
+          git push origin v${{ steps.get_version.outputs.version }}
+        
+      - name: Publish to crates.io
+        run: cargo publish --token ${{ secrets.CRATES_TOKEN }}
+          
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ steps.get_version.outputs.version }}
+          name: Release v${{ steps.get_version.outputs.version }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
