@@ -69,12 +69,16 @@ Options:
     -s [+][-]seek  start at <seek> bytes abs. (or +: rel.) infile offset.
     -u          use upper case hex letters.
     -R when     colorize the output; <when> can be 'always', 'auto' or 'never'. Default: 'auto'.
-    -v          show version: "rsxxd 1.0.0 by Reidho Satria.".
+    -v          show version: "rsxxd 1.1.0 by Reidho Satria.".
 ```
 
 ## Contributing
 
 Please read [CONTRIBUTING.md](CONTRIBUTING.md) for details on our code of conduct and the process for submitting pull requests.
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for a detailed history of changes between versions.
 
 ## License
 
