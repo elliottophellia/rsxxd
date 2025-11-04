@@ -233,3 +233,111 @@ fn test_c_style_array() {
 
     let _ = fs::remove_file(fname);
 }
+
+#[test]
+fn test_empty_file() {
+    let fname = "test_empty.bin";
+    File::create(fname).expect("Failed to create empty file");
+
+    let output = run_cmd(&["rsxxd", fname]).expect("Failed to run rsxxd on empty file");
+
+    assert!(
+        output.is_empty() || output.trim().is_empty(),
+        "Empty file should produce no hex dump output"
+    );
+
+    let _ = fs::remove_file(fname);
+}
+
+#[test]
+fn test_single_byte_file() {
+    let fname = "test_single.bin";
+    let mut f = File::create(fname).expect("Failed to create file");
+    f.write_all(&[0x42]).unwrap();
+    drop(f);
+
+    let output = run_cmd(&["rsxxd", fname]).expect("Failed to run rsxxd");
+
+    assert!(output.contains("42"), "Output should contain hex byte 42");
+    assert!(output.contains("B"), "Output should contain ASCII 'B'");
+
+    let _ = fs::remove_file(fname);
+}
+
+#[test]
+fn test_all_zeros_file() {
+    let fname = "test_zeros.bin";
+    let mut f = File::create(fname).expect("Failed to create file");
+    f.write_all(&[0u8; 128]).unwrap();
+    drop(f);
+
+    let output = run_cmd(&["rsxxd", fname]).expect("Failed to run rsxxd");
+
+    let line_count = output.lines().count();
+    assert!(line_count >= 8, "Should have at least 8 lines for 128 bytes");
+
+    let _ = fs::remove_file(fname);
+}
+
+#[test]
+fn test_autoskip_zeros() {
+    let fname = "test_autoskip.bin";
+    let mut f = File::create(fname).expect("Failed to create file");
+    f.write_all(b"START").unwrap();
+    f.write_all(&[0u8; 256]).unwrap();
+    f.write_all(b"END").unwrap();
+    drop(f);
+
+    let output = run_cmd(&["rsxxd", "-a", fname]).expect("Failed to run rsxxd with autoskip");
+
+    assert!(output.contains("*"), "Autoskip should produce '*' marker");
+
+    let line_count_with_autoskip = output.lines().count();
+
+    let output_no_autoskip = run_cmd(&["rsxxd", fname]).expect("Failed without autoskip");
+    let line_count_without = output_no_autoskip.lines().count();
+
+    assert!(
+        line_count_with_autoskip < line_count_without,
+        "Autoskip should reduce line count"
+    );
+
+    let _ = fs::remove_file(fname);
+}
+
+#[test]
+fn test_binary_mode() {
+    let fname = "test_binary.bin";
+    let mut f = File::create(fname).expect("Failed to create file");
+    f.write_all(&[0b10101010, 0b11110000, 0b00001111]).unwrap();
+    drop(f);
+
+    let output = run_cmd(&["rsxxd", "-b", fname]).expect("Failed to run rsxxd in binary mode");
+
+    assert!(output.contains("10101010"), "Should contain binary representation of 0xAA");
+    assert!(output.contains("11110000"), "Should contain binary representation of 0xF0");
+    assert!(output.contains("00001111"), "Should contain binary representation of 0x0F");
+
+    let _ = fs::remove_file(fname);
+}
+
+#[test]
+fn test_nonexistent_file_error() {
+    let result = run_cmd(&["rsxxd", "this_file_does_not_exist_12345.bin"]);
+
+    assert!(result.is_err(), "Should return error for nonexistent file");
+}
+
+#[test]
+fn test_little_endian() {
+    let fname = "test_endian.bin";
+    let mut f = File::create(fname).expect("Failed to create file");
+    f.write_all(&[0x12, 0x34, 0x56, 0x78]).unwrap();
+    drop(f);
+
+    let output = run_cmd(&["rsxxd", "-e", fname]).expect("Failed with little-endian mode");
+
+    assert!(output.contains("78563412"), "Little-endian should reverse byte order in groups");
+
+    let _ = fs::remove_file(fname);
+}

@@ -7,7 +7,11 @@ use std::path::Path;
 use std::process;
 use std::result::Result;
 
-const MY_VERSION: &str = "1.0.0 by Reidho Satria.";
+const MY_VERSION: &str = "1.1.0 by Reidho Satria.";
+
+const SEEK_BUFFER_SIZE: usize = 8192;
+const HEX_DECODE_BUFFER_SIZE: usize = 4096;
+const FILE_READ_BUFFER_SIZE: usize = 4096;
 
 const HEX_LOWER: [&str; 256] = [
     "00", "01", "02", "03", "04", "05", "06", "07", "08", "09", "0a", "0b", "0c", "0d", "0e", "0f",
@@ -242,7 +246,7 @@ fn is_valid_var_name(name: &str) -> bool {
         return false;
     }
 
-    name.chars().all(|c| (c.is_alphanumeric() || c == '_'))
+    name.chars().all(|c| c.is_alphanumeric() || c == '_')
 }
 
 fn extract_basename(path: &str) -> String {
@@ -571,15 +575,6 @@ fn parse_args() -> XxdResult<Options> {
                     "'{path}' is not a regular file"
                 )));
             }
-            match File::open(path) {
-                Ok(_) => {}
-                Err(e) => {
-                    return Err(XxdError::IoError(
-                        e,
-                        format!("Cannot access input file '{path}'"),
-                    ));
-                }
-            }
         }
     }
 
@@ -590,16 +585,6 @@ fn parse_args() -> XxdResult<Options> {
                 return Err(XxdError::InvalidArgument(format!(
                     "Output path '{path}' is a directory"
                 )));
-            }
-
-            match File::create(path) {
-                Ok(_) => {}
-                Err(e) => {
-                    return Err(XxdError::IoError(
-                        e,
-                        format!("Cannot create or write to output file '{path}'"),
-                    ));
-                }
             }
         }
     }
@@ -630,7 +615,7 @@ fn format_offset(offset: u64, decimal: bool, add_offset: u64) -> String {
     }
 }
 
-fn determine_color_usage(options: &mut Options, _outfile: &dyn Write) {
+fn determine_color_usage(options: &mut Options) {
     match options.color_mode.as_str() {
         "always" => {
             options.use_color = true;
@@ -750,7 +735,7 @@ fn seek_input(infile: Box<dyn Read>, options: &Options) -> XxdResult<Box<dyn Rea
             ));
         }
 
-        let mut buffer = [0u8; 8192];
+        let mut buffer = [0u8; SEEK_BUFFER_SIZE];
         let mut remaining = options.seek;
         let mut seekable = infile;
 
@@ -839,7 +824,7 @@ fn hexdump(options: &mut Options) -> XxdResult<()> {
     let mut infile = seek_input(infile, options)?;
     let mut outfile = open_output(&options.fout)?;
 
-    determine_color_usage(options, &*outfile);
+    determine_color_usage(options);
 
     if options.revert {
         if options.include {
@@ -1135,7 +1120,7 @@ fn hextobin<R: Read, W: Write>(
 ) -> XxdResult<()> {
     let mut line = String::new();
     let mut line_reader = BufReader::new(infile);
-    let mut decoded_bytes = Vec::with_capacity(4096);
+    let mut decoded_bytes = Vec::with_capacity(HEX_DECODE_BUFFER_SIZE);
 
     while let Ok(bytes) = line_reader.read_line(&mut line) {
         if bytes == 0 {
@@ -1335,7 +1320,7 @@ fn include_dump<R: Read, W: Write>(
     outfile: &mut W,
     options: &Options,
 ) -> XxdResult<()> {
-    let mut buffer = vec![0u8; 4096];
+    let mut buffer = vec![0u8; FILE_READ_BUFFER_SIZE];
     let mut addr: u64 = 0;
     let mut total_read: u64 = 0;
 
