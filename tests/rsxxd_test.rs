@@ -274,7 +274,10 @@ fn test_all_zeros_file() {
     let output = run_cmd(&["rsxxd", fname]).expect("Failed to run rsxxd");
 
     let line_count = output.lines().count();
-    assert!(line_count >= 8, "Should have at least 8 lines for 128 bytes");
+    assert!(
+        line_count >= 8,
+        "Should have at least 8 lines for 128 bytes"
+    );
 
     let _ = fs::remove_file(fname);
 }
@@ -314,9 +317,18 @@ fn test_binary_mode() {
 
     let output = run_cmd(&["rsxxd", "-b", fname]).expect("Failed to run rsxxd in binary mode");
 
-    assert!(output.contains("10101010"), "Should contain binary representation of 0xAA");
-    assert!(output.contains("11110000"), "Should contain binary representation of 0xF0");
-    assert!(output.contains("00001111"), "Should contain binary representation of 0x0F");
+    assert!(
+        output.contains("10101010"),
+        "Should contain binary representation of 0xAA"
+    );
+    assert!(
+        output.contains("11110000"),
+        "Should contain binary representation of 0xF0"
+    );
+    assert!(
+        output.contains("00001111"),
+        "Should contain binary representation of 0x0F"
+    );
 
     let _ = fs::remove_file(fname);
 }
@@ -337,7 +349,10 @@ fn test_little_endian() {
 
     let output = run_cmd(&["rsxxd", "-e", fname]).expect("Failed with little-endian mode");
 
-    assert!(output.contains("78563412"), "Little-endian should reverse byte order in groups");
+    assert!(
+        output.contains("78563412"),
+        "Little-endian should reverse byte order in groups"
+    );
 
     let _ = fs::remove_file(fname);
 }
