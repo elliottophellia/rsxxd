@@ -1,13 +1,13 @@
 use std::env;
 use std::error::Error;
-use std::fmt::{self, Write as FmtWrite};
+use std::fmt;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, BufWriter, IsTerminal, Read, Seek, SeekFrom, Write};
 use std::path::Path;
 use std::process;
 use std::result::Result;
 
-const MY_VERSION: &str = "1.2.0 by Reidho Satria.";
+const MY_VERSION: &str = "1.1.0 by Reidho Satria.";
 
 const SEEK_BUFFER_SIZE: usize = 8192;
 const HEX_DECODE_BUFFER_SIZE: usize = 4096;
@@ -128,19 +128,15 @@ const EBCDIC_TO_ASCII: [char; 256] = [
 
 struct Colors {
     address: &'static str,
-    hex_printable: &'static str,
-    hex_nonprintable: &'static str,
-    ascii_printable: &'static str,
-    ascii_nonprintable: &'static str,
+    hex: &'static str,
+    ascii: &'static str,
     reset: &'static str,
 }
 
 const COLOR_CODES: Colors = Colors {
-    address: "\x1b[1;37m",
-    hex_printable: "\x1b[1;32m",
-    hex_nonprintable: "\x1b[1;31m",
-    ascii_printable: "\x1b[1;32m",
-    ascii_nonprintable: "\x1b[1;31m",
+    address: "\x1b[33m",
+    hex: "\x1b[36m",
+    ascii: "\x1b[32m",
     reset: "\x1b[0m",
 };
 
@@ -610,34 +606,13 @@ fn is_hex_digit(c: char) -> bool {
     c.is_ascii_hexdigit()
 }
 
-fn classify_byte_ascii(b: u8) -> (bool, char) {
-    if (32..=126).contains(&b) {
-        (true, b as char)
+fn format_offset(offset: u64, decimal: bool, add_offset: u64) -> String {
+    let total = offset + add_offset;
+    if decimal {
+        format!("{total:08}")
     } else {
-        (false, '.')
+        format!("{total:08x}")
     }
-}
-
-fn classify_byte_ebcdic(b: u8) -> (bool, char) {
-    let ebcdic_char = EBCDIC_TO_ASCII[b as usize];
-    let is_printable = ebcdic_char.is_ascii_graphic() || ebcdic_char == ' ';
-    let display_char = if is_printable { ebcdic_char } else { '.' };
-    (is_printable, display_char)
-}
-
-fn push_offset(buf: &mut String, offset: u64, options: &Options) {
-    let total = offset.saturating_add(options.add_offset);
-    let _ = if options.decimal_offset {
-        FmtWrite::write_fmt(buf, format_args!("{total:08}: "))
-    } else {
-        FmtWrite::write_fmt(buf, format_args!("{total:08x}: "))
-    };
-}
-
-fn push_colored_offset(buf: &mut String, offset: u64, options: &Options) {
-    buf.push_str(COLOR_CODES.address);
-    push_offset(buf, offset, options);
-    buf.push_str(COLOR_CODES.reset);
 }
 
 fn determine_color_usage(options: &mut Options) {
@@ -907,12 +882,7 @@ fn hexdump(options: &mut Options) -> XxdResult<()> {
         &HEX_LOWER
     };
 
-    let per_byte_estimate = if options.use_color { 18 } else { 6 };
-    let estimated_line_width = options
-        .cols
-        .saturating_mul(per_byte_estimate)
-        .saturating_add(96);
-    let mut line_buffer = String::with_capacity(estimated_line_width);
+    let mut line_buffer = String::with_capacity(256);
 
     loop {
         let mut bytes_read = match infile.read(&mut buffer) {
@@ -1018,83 +988,51 @@ fn print_line<W: Write>(
     line_buffer.clear();
 
     if options.use_color {
-        push_colored_offset(line_buffer, addr, options);
+        line_buffer.push_str(COLOR_CODES.address);
+        line_buffer.push_str(&format_offset(
+            addr,
+            options.decimal_offset,
+            options.add_offset,
+        ));
+        line_buffer.push_str(": ");
+        line_buffer.push_str(COLOR_CODES.reset);
     } else {
-        push_offset(line_buffer, addr, options);
+        line_buffer.push_str(&format_offset(
+            addr,
+            options.decimal_offset,
+            options.add_offset,
+        ));
+        line_buffer.push_str(": ");
     }
 
     let bytes_read = buffer.len();
 
     if options.bin_hex {
-        let mut current_color: Option<&str> = None;
-
-        for &b in buffer {
-            let (is_printable, _) = if options.ebcdic {
-                classify_byte_ebcdic(b)
-            } else {
-                classify_byte_ascii(b)
-            };
-
-            if options.use_color {
-                let desired_color = if is_printable {
-                    COLOR_CODES.hex_printable
-                } else {
-                    COLOR_CODES.hex_nonprintable
-                };
-
-                if current_color != Some(desired_color) {
-                    if current_color.is_some() {
-                        line_buffer.push_str(COLOR_CODES.reset);
-                    }
-                    line_buffer.push_str(desired_color);
-                    current_color = Some(desired_color);
-                }
-            }
-
-            let _ = FmtWrite::write_fmt(line_buffer, format_args!("{b:08b} "));
+        if options.use_color {
+            line_buffer.push_str(COLOR_CODES.hex);
         }
 
-        if current_color.is_some() {
-            line_buffer.push_str(COLOR_CODES.reset);
+        for &b in buffer {
+            line_buffer.push_str(&format!("{b:08b} "));
         }
 
         for _ in bytes_read..cols {
             line_buffer.push_str("         ");
         }
+
+        if options.use_color {
+            line_buffer.push_str(COLOR_CODES.reset);
+        }
     } else if options.little_endian {
-        let mut current_color: Option<&str> = None;
+        if options.use_color {
+            line_buffer.push_str(COLOR_CODES.hex);
+        }
 
         for chunk in buffer.chunks(options.octspergrp) {
             for &b in chunk.iter().rev() {
-                let (is_printable, _) = if options.ebcdic {
-                    classify_byte_ebcdic(b)
-                } else {
-                    classify_byte_ascii(b)
-                };
-
-                if options.use_color {
-                    let desired_color = if is_printable {
-                        COLOR_CODES.hex_printable
-                    } else {
-                        COLOR_CODES.hex_nonprintable
-                    };
-
-                    if current_color != Some(desired_color) {
-                        if current_color.is_some() {
-                            line_buffer.push_str(COLOR_CODES.reset);
-                        }
-                        line_buffer.push_str(desired_color);
-                        current_color = Some(desired_color);
-                    }
-                }
-
                 line_buffer.push_str(hex_table[b as usize]);
             }
             line_buffer.push(' ');
-        }
-
-        if current_color.is_some() {
-            line_buffer.push_str(COLOR_CODES.reset);
         }
 
         let remaining = cols - bytes_read;
@@ -1105,42 +1043,21 @@ fn print_line<W: Write>(
             }
             line_buffer.push(' ');
         }
+
+        if options.use_color {
+            line_buffer.push_str(COLOR_CODES.reset);
+        }
     } else {
-        let mut current_color: Option<&str> = None;
+        if options.use_color {
+            line_buffer.push_str(COLOR_CODES.hex);
+        }
 
         buffer.iter().enumerate().for_each(|(i, &b)| {
-            let (is_printable, _) = if options.ebcdic {
-                classify_byte_ebcdic(b)
-            } else {
-                classify_byte_ascii(b)
-            };
-
-            if options.use_color {
-                let desired_color = if is_printable {
-                    COLOR_CODES.hex_printable
-                } else {
-                    COLOR_CODES.hex_nonprintable
-                };
-
-                if current_color != Some(desired_color) {
-                    if current_color.is_some() {
-                        line_buffer.push_str(COLOR_CODES.reset);
-                    }
-                    line_buffer.push_str(desired_color);
-                    current_color = Some(desired_color);
-                }
-            }
-
             line_buffer.push_str(hex_table[b as usize]);
-
             if (i + 1) % options.octspergrp == 0 && i < bytes_read - 1 {
                 line_buffer.push(' ');
             }
         });
-
-        if current_color.is_some() {
-            line_buffer.push_str(COLOR_CODES.reset);
-        }
 
         for i in bytes_read..cols {
             line_buffer.push_str("  ");
@@ -1148,66 +1065,39 @@ fn print_line<W: Write>(
                 line_buffer.push(' ');
             }
         }
+
+        if options.use_color {
+            line_buffer.push_str(COLOR_CODES.reset);
+        }
     }
 
     line_buffer.push_str("  ");
 
+    if options.use_color {
+        line_buffer.push_str(COLOR_CODES.ascii);
+    }
+
     if options.ebcdic {
-        let mut current_color: Option<&str> = None;
-
         buffer.iter().for_each(|&b| {
-            let (is_printable, display_char) = classify_byte_ebcdic(b);
-
-            if options.use_color {
-                let desired_color = if is_printable {
-                    COLOR_CODES.ascii_printable
-                } else {
-                    COLOR_CODES.ascii_nonprintable
-                };
-
-                if current_color != Some(desired_color) {
-                    if current_color.is_some() {
-                        line_buffer.push_str(COLOR_CODES.reset);
-                    }
-                    line_buffer.push_str(desired_color);
-                    current_color = Some(desired_color);
-                }
-            }
-
-            line_buffer.push(display_char);
+            let ebcdic_char = EBCDIC_TO_ASCII[b as usize];
+            line_buffer.push(if ebcdic_char.is_ascii_graphic() || ebcdic_char == ' ' {
+                ebcdic_char
+            } else {
+                '.'
+            });
         });
-
-        if current_color.is_some() {
-            line_buffer.push_str(COLOR_CODES.reset);
-        }
     } else {
-        let mut current_color: Option<&str> = None;
-
         buffer.iter().for_each(|&b| {
-            let (is_printable, display_char) = classify_byte_ascii(b);
-
-            if options.use_color {
-                let desired_color = if is_printable {
-                    COLOR_CODES.ascii_printable
-                } else {
-                    COLOR_CODES.ascii_nonprintable
-                };
-
-                if current_color != Some(desired_color) {
-                    if current_color.is_some() {
-                        line_buffer.push_str(COLOR_CODES.reset);
-                    }
-                    line_buffer.push_str(desired_color);
-                    current_color = Some(desired_color);
-                }
-            }
-
-            line_buffer.push(display_char);
+            line_buffer.push(if (32..=126).contains(&b) {
+                b as char
+            } else {
+                '.'
+            });
         });
+    }
 
-        if current_color.is_some() {
-            line_buffer.push_str(COLOR_CODES.reset);
-        }
+    if options.use_color {
+        line_buffer.push_str(COLOR_CODES.reset);
     }
 
     match writeln!(outfile, "{line_buffer}") {
@@ -1329,7 +1219,7 @@ fn postscript_dump<R: Read, W: Write>(
     };
 
     if options.use_color {
-        match write!(outfile, "{}", COLOR_CODES.hex_printable) {
+        match write!(outfile, "{}", COLOR_CODES.hex) {
             Ok(_) => {}
             Err(e) => {
                 return Err(XxdError::IoError(
@@ -1474,7 +1364,7 @@ fn include_dump<R: Read, W: Write>(
         match write!(
             outfile,
             " {}{}{}[]",
-            COLOR_CODES.ascii_printable, var_name, COLOR_CODES.reset
+            COLOR_CODES.ascii, var_name, COLOR_CODES.reset
         ) {
             Ok(_) => {}
             Err(e) => {
@@ -1552,17 +1442,7 @@ fn include_dump<R: Read, W: Write>(
             }
 
             if options.use_color {
-                let (is_printable, _) = if options.ebcdic {
-                    classify_byte_ebcdic(buffer[i])
-                } else {
-                    classify_byte_ascii(buffer[i])
-                };
-                let color = if is_printable {
-                    COLOR_CODES.hex_printable
-                } else {
-                    COLOR_CODES.hex_nonprintable
-                };
-                line_buffer.push_str(color);
+                line_buffer.push_str(COLOR_CODES.hex);
             }
 
             line_buffer.push_str("0x");
@@ -1614,7 +1494,7 @@ fn include_dump<R: Read, W: Write>(
         match write!(
             outfile,
             "{}{}_len{} = ",
-            COLOR_CODES.ascii_printable, var_name, COLOR_CODES.reset
+            COLOR_CODES.ascii, var_name, COLOR_CODES.reset
         ) {
             Ok(_) => {}
             Err(e) => {
@@ -1625,11 +1505,7 @@ fn include_dump<R: Read, W: Write>(
             }
         }
 
-        match writeln!(
-            outfile,
-            "{}{}{};",
-            COLOR_CODES.hex_printable, addr, COLOR_CODES.reset
-        ) {
+        match writeln!(outfile, "{}{}{};", COLOR_CODES.hex, addr, COLOR_CODES.reset) {
             Ok(_) => {}
             Err(e) => {
                 return Err(XxdError::IoError(

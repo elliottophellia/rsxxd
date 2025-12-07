@@ -69,7 +69,7 @@ Options:
     -s [+][-]seek  start at <seek> bytes abs. (or +: rel.) infile offset.
     -u          use upper case hex letters.
     -R when     colorize the output; <when> can be 'always', 'auto' or 'never'. Default: 'auto'.
-    -v          show version: "rsxxd 1.2.0 by Reidho Satria.".
+    -v          show version: "rsxxd 1.1.0 by Reidho Satria.".
 ```
 
 ## Contributing
