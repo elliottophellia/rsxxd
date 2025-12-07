@@ -4,6 +4,10 @@ on:
     branches:
       - dev
       - main
+  push:
+    branches:
+      - dev
+      - main
 
 env:
   RUST_BACKTRACE: full
