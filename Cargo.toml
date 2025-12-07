@@ -1,7 +1,7 @@
 [package]
 name = "rsxxd"
 version = "1.1.0"
-edition = "2024"
+edition = "2021"
 readme = "README.md"
 license = "GPL-3.0-or-later"
 authors = ["elliottophellia"]
