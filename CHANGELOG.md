@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.0] - 2025-12-07
+
+### Changed
+- Improved colorized output for clearer separation of offsets, hex bytes, and ASCII columns without altering plain-text layout.
+
+### Performance
+- Reduced per-line allocations and reused buffers in the forward hex-dump path for faster output on large inputs.
+
 ## [1.1.0] - 2025-12-04
 
 ### Fixed
@@ -68,5 +76,6 @@ All notable changes to this project will be documented in this file.
 - Efficient memory usage with buffered I/O
 - Optimized hex lookup tables for fast encoding
 
+[1.2.0]: https://github.com/elliottophellia/rsxxd/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/elliottophellia/rsxxd/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/elliottophellia/rsxxd/releases/tag/v1.0.0
