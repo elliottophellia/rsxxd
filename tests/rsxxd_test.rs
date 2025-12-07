@@ -62,6 +62,32 @@ fn create_test_file(fname: &str) -> u64 {
     file_size
 }
 
+fn strip_ansi(input: &str) -> String {
+    let mut output = String::with_capacity(input.len());
+    let mut chars = input.chars().peekable();
+
+    while let Some(ch) = chars.next() {
+        if ch == '\x1b' {
+            if let Some('[') = chars.peek() {
+                // Consume '['
+                let _ = chars.next();
+                // Skip until a letter, which ends the control sequence.
+                while let Some(&next) = chars.peek() {
+                    if next.is_ascii_alphabetic() {
+                        let _ = chars.next();
+                        break;
+                    }
+                    let _ = chars.next();
+                }
+                continue;
+            }
+        }
+        output.push(ch);
+    }
+
+    output
+}
+
 #[test]
 fn test_standard_hex_dump() {
     let fname = "test_std_hex.bin";
@@ -352,6 +378,29 @@ fn test_little_endian() {
     assert!(
         output.contains("78563412"),
         "Little-endian should reverse byte order in groups"
+    );
+
+    let _ = fs::remove_file(fname);
+}
+
+#[test]
+fn test_color_output_matches_plain_when_stripped() {
+    let fname = "test_color.bin";
+    create_test_file(fname);
+
+    let plain =
+        run_cmd(&["rsxxd", "-R", "never", fname]).expect("Failed to run rsxxd without color");
+    let colored =
+        run_cmd(&["rsxxd", "-R", "always", fname]).expect("Failed to run rsxxd with color");
+
+    assert!(
+        colored.contains("\u{001b}["),
+        "Colored output should include ANSI escape codes"
+    );
+    assert_eq!(
+        plain,
+        strip_ansi(&colored),
+        "Stripping ANSI codes should match plain output"
     );
 
     let _ = fs::remove_file(fname);
